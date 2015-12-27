@@ -4,37 +4,39 @@ import (
 	"fmt"
 	"os"
     "net/http"
-    "io"
+	"io/ioutil"
 )
 
 func main() {	
 	file, err := createFile()
 	if err != nil {
 		fmt.Println("Could not create file")
+		return
 	}
 	
 	response, err := download()
 	if err != nil {
 		fmt.Println("Could not download data")
+		return
 	}
-	
 	saveToFile(response, file)	
 }
 
-func saveToFile(response *http.Response, file *os.File) {
-	size, err := io.Copy(file, response.Body)
-	if err == nil {
-		fmt.Println("Could not create file")
+func saveToFile(data []byte, file *os.File) {
+	err := ioutil.WriteFile("test.mp3", data, 0644)
+	if err != nil {
+		fmt.Print(err)
+		fmt.Println("Could not copy data")
 		return
 	}
-	
-	fmt.Printf("Did write %d bytes to file", size)
+	fmt.Println("Saved file")
 }
 
-func download() (*http.Response, error) {
-	response, err := http.Get("http://example.com/")
+func download() ([]byte, error) {
+	response, err := http.Get("http://sverigesradio.se/topsy/ljudfil/5560699.mp3")
 	defer response.Body.Close()
-	return response, err
+    body, err := ioutil.ReadAll(response.Body)
+	return body, err
 }
 
 func createFile() (*os.File, error) {
