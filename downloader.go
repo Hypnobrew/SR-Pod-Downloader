@@ -32,8 +32,7 @@ type podData struct {
 
 func main() {
 	
-	metaData := fetchMetaData("2399")
-	
+	metaData := prepareMetaData("2399")
 	for _, v := range metaData {		
 		response, err := download(v.url)
 		if err != nil {
@@ -44,14 +43,25 @@ func main() {
 	}
 }
 
-func fetchMetaData(programID string) ([]podData) {
+func prepareMetaData(programID string) ([]podData) {
 
-	url := fmt.Sprintf("http://api.sr.se/api/v2/podfiles?programid=%s&format=json", programID)	
+	allPodcasts := make([]podData, 25)
+	url := fmt.Sprintf("http://api.sr.se/api/v2/podfiles?programid=%s&format=json", programID)
+	for haveMorePages := true; haveMorePages; haveMorePages = (url != "") {
+		pagedPodcasts, urlToNextPage := fetchMetaData(url)
+		allPodcasts = append(allPodcasts, pagedPodcasts...)
+		url = urlToNextPage	
+	}
+	
+	return allPodcasts
+}
+
+func fetchMetaData(url string) ([]podData, string) {
 	response, err := http.Get(url)
 	defer response.Body.Close()
 	if err != nil {
 		fmt.Println("Could not fetch meta data")
-		return nil
+		return nil, ""
 	}
 	
 	content, err := ioutil.ReadAll(response.Body)
@@ -69,9 +79,8 @@ func fetchMetaData(programID string) ([]podData) {
 			title : strings.Replace(podfile.Title, " ", "_", -1),
 			url : podfile.Url,
 		}	
-        //fmt.Printf("%s %s\n", podfile.Title, podfile.Url)
     }
-	return pods
+	return pods, parsedData.Pagination.Nextpage
 }
 
 func saveToFile(data []byte, title string) {
