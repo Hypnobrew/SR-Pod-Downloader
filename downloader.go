@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"strings"
+	"flag"
 )
 
 type topnode struct {
@@ -32,27 +33,43 @@ type podData struct {
 
 func main() {
 	
-	metaData := prepareMetaData("2399")
-	for _, v := range metaData {		
+	programID := flag.Int("id", 0, "The id of the program you want to download podcasts for")
+	numberOfPods := flag.Int("pods", 10, "The number of podcasts to download")	
+	flag.Parse()
+	
+	if(*programID == 0) {
+		fmt.Println("Error: Please specify the id on the program you wish to download. Use --help for more information.")
+		return
+	}
+	
+	metaData := prepareMetaData(*programID, *numberOfPods)
+	for i, v := range metaData {
+		fmt.Printf("%d: Downloading file %s", i, v.url)
 		response, err := download(v.url)
 		if err != nil {
-			fmt.Println("Could not download data")
+			fmt.Printf("Error downloading %s",  v.url)
 			return
 		}
 		saveToFile(response, v.title)	
 	}
 }
 
-func prepareMetaData(programID string) ([]podData) {
-
-	allPodcasts := make([]podData, 25)
-	url := fmt.Sprintf("http://api.sr.se/api/v2/podfiles?programid=%s&format=json", programID)
+func prepareMetaData(programID int, numberOfPods int) ([]podData) {
+	
+	var allPodcasts []podData
+	url := fmt.Sprintf("http://api.sr.se/api/v2/podfiles?programid=%d&format=json", programID)
 	for haveMorePages := true; haveMorePages; haveMorePages = (url != "") {
 		pagedPodcasts, urlToNextPage := fetchMetaData(url)
 		allPodcasts = append(allPodcasts, pagedPodcasts...)
+		
+		if(len(allPodcasts) >= numberOfPods) {
+			limitedPodcastas := make([]podData, numberOfPods)
+			copy(limitedPodcastas, allPodcasts)
+			allPodcasts = limitedPodcastas
+			break
+		}
 		url = urlToNextPage	
 	}
-	
 	return allPodcasts
 }
 
@@ -72,8 +89,7 @@ func fetchMetaData(url string) ([]podData, string) {
         fmt.Println("error:", err)
     }
 	
-	pods := make([]podData, 25)
-	
+	pods := make([]podData, len(parsedData.Podfiles))
 	for i, podfile := range parsedData.Podfiles {
 		pods[i] = podData{
 			title : strings.Replace(podfile.Title, " ", "_", -1),
@@ -90,7 +106,6 @@ func saveToFile(data []byte, title string) {
 		fmt.Println("Could not copy data")
 		return
 	}
-	fmt.Println("Saved file")
 }
 
 func download(url string) ([]byte, error) {
