@@ -35,6 +35,7 @@ func main() {
 	
 	programID := flag.Int("id", 0, "The id of the program you want to download podcasts for")
 	numberOfPods := flag.Int("pods", 10, "The number of podcasts to download")	
+	numberOfThreads := flag.Int("threads", 1, "Number of concurrent threads downloading podcasts")
 	flag.Parse()
 	
 	if(*programID == 0) {
@@ -43,15 +44,23 @@ func main() {
 	}
 	
 	metaData := prepareMetaData(*programID, *numberOfPods)
-	for i, v := range metaData {
-		fmt.Printf("%d: Downloading file %s", i, v.url)
-		response, err := download(v.url)
-		if err != nil {
-			fmt.Printf("Error downloading %s",  v.url)
-			return
-		}
-		saveToFile(response, v.title)	
+	
+	jobs := make(chan podData, len(metaData))
+    results := make(chan bool, len(metaData))
+	
+	for w := 1; w <= *numberOfThreads; w++ {
+        go worker(w, jobs, results)
+    }
+		
+	for _, v := range metaData {
+		jobs <- v
 	}
+	
+	close(jobs)
+		
+	for a := 0; a < len(metaData); a++ {
+        <-results
+    }
 }
 
 func prepareMetaData(programID int, numberOfPods int) ([]podData) {
@@ -97,6 +106,21 @@ func fetchMetaData(url string) ([]podData, string) {
 		}	
     }
 	return pods, parsedData.Pagination.Nextpage
+}
+
+func worker(id int, jobs <-chan podData, results chan<- bool) {
+    for j := range jobs {
+        fmt.Println("Worker", id, "start downloading file", j.url)
+       
+		response, err := download(j.url)
+		if err != nil {
+			fmt.Printf("Error downloading %s",  j.url)
+			return
+		}
+		saveToFile(response, j.title)
+		fmt.Println("Worker", id, "finished downloading file", j.url)
+        results <- true
+    }
 }
 
 func saveToFile(data []byte, title string) {
